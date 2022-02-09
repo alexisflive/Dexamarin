@@ -35,10 +35,13 @@ import shutil
 import struct
 import sys
 import lz4.block
+
+errorFiles = []
         
 
 def decompileAssemblies(apkPath, outDirName):
     header_xalz_magic = b'XALZ'
+    assembliesFoldePath = outDirName + "/assemblies"
 
     os.system('unzip {} -d {}'.format(apkPath, outDirName))
 
@@ -49,35 +52,41 @@ def decompileAssemblies(apkPath, outDirName):
             except PermissionError:
                 shutil.rmtree(os.path.join(outDirName, fname))
 
-    for root, dirs, files in os.walk(outDirName + "/assemblies"):
+    for root, dirs, files in os.walk(assembliesFoldePath):
         for file in files:
             if file.endswith('.dll'):
                 with open(root + "/" + file, "rb") as ofile:
                     data = ofile.read()
+                    decompiledFilePath = ofile.name.replace(".dll", ".cs")
+
                     if data[:4] == header_xalz_magic:
                         decompressXalz(ofile.name, data)
 
-                    os.system('ilspycmd {} > {}'.format(ofile.name, ofile.name.replace(".dll", ".cs")))
-                    os.remove(ofile.name)
-                    print('{} was successfully decompiled'.format(ofile.name))
+                    if os.system('ilspycmd {} > {}'.format(ofile.name, decompiledFilePath)):
+                        print('Dexamarin: there was an error decompiling {}'.format(ofile.name))
+                        errorFiles.append(ofile.name)
+                        os.remove(decompiledFilePath)
+                    else:
+                        os.remove(ofile.name)
+                        shutil.move(decompiledFilePath, outDirName)
+                        print('Dexamarin: {} was successfully decompiled'.format(ofile.name))
 
-    for fname in os.listdir(outDirName + "/assemblies/"):
-        shutil.move(outDirName + "/assemblies/" + fname, outDirName)
+    if not os.listdir(assembliesFoldePath):
+        shutil.rmtree(assembliesFoldePath)
 
-    shutil.rmtree(outDirName + "/assemblies")
-    print("{} successfully decompiled!".format(apkPath))
+    if errorFiles:
+        print("Dexamarin: error decompiling the following files: ")
+        for errorFile in errorFiles:
+            print('Dexamarin: error decompiling: ' + errorFile)
+    
+    print("Dexamarin: finished decompiling the {}'s Xamarin assemblies".format(apkPath))
 
 
 # modified from:
 # https://raw.githubusercontent.com/x41sec/tools/master/Mobile/Xamarin/Xamarin_XALZ_decompress.py
 def decompressXalz(inFilePath, data):
-            header_index = data[4:8]
             header_uncompressed_length = struct.unpack('<I', data[8:12])[0]
             payload = data[12:]
-            
-            print("header index: %s" % header_index)
-            print("compressed payload size: %s bytes" % len(payload))
-            print("uncompressed length according to header: %s bytes" % header_uncompressed_length)
             
             decompressed = lz4.block.decompress(payload, uncompressed_size=header_uncompressed_length)
                     
@@ -85,7 +94,7 @@ def decompressXalz(inFilePath, data):
                 output_file.write(decompressed)
                 output_file.close()
 
-            print("{} was xalz decompressed".format(inFilePath))
+            print("Dexamarin: {} was xalz decompressed".format(inFilePath))
 
 
 if __name__ == "__main__":
