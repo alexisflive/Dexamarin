@@ -1,4 +1,6 @@
 #! /bin/bash
+# enabling: adb shell "sh transparent_proxy.sh enable proxy_ip:proxy_port"
+# disabling: adb shell "sh transparent_proxy.sh disable"
 
 if [[ $1 == "enable" ]]; then
     # Flush current rules
