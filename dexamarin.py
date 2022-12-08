@@ -26,6 +26,7 @@ def decompileAssemblies(apkPath, outDirName):
                 except PermissionError:
                     shutil.rmtree(os.path.join(outDirName, fname))
 
+        # Decompress xalz compressed files
         for root, dirs, files in os.walk(assembliesFoldePath):
             for file in files:
                 if file.endswith('.dll'):
@@ -35,6 +36,14 @@ def decompileAssemblies(apkPath, outDirName):
 
                         if data[:4] == header_xalz_magic:
                             decompressXalz(ofile.name, data)
+
+        # Decompile .dll assemblies
+        # (needs to occur in a separate loop because otherwise ilspycmd has issues opening the files)
+        for root, dirs, files in os.walk(assembliesFoldePath):
+            for file in files:
+                if file.endswith('.dll'):
+                    with open(root + "/" + file, "rb") as ofile:
+                        decompiledFilePath = ofile.name.replace(".dll", ".cs")
 
                         if os.system('ilspycmd {} > {} 2>/dev/null'.format(ofile.name, decompiledFilePath)):
                             print('Dexamarin: there was an error decompiling {}'.format(ofile.name))
