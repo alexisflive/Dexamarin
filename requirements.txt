@@ -1,0 +1,2 @@
+lz4
+pyxamstore @ git+https://github.com/alexisegf/pyxamstore.git

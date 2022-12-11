@@ -2,6 +2,7 @@ import os
 import shutil
 import struct
 import sys
+import time
 import lz4.block
 
 
@@ -10,7 +11,7 @@ errorFiles = []
 
 def decompileAssemblies(apkPath, outDirName):
         header_xalz_magic = b'XALZ'
-        assembliesFoldePath = outDirName + "/assemblies"
+        assembliesFolderPath = outDirName + "/assemblies"
 
         os.system('unzip {} -d {}'.format(apkPath, outDirName))
 
@@ -26,8 +27,22 @@ def decompileAssemblies(apkPath, outDirName):
                 except PermissionError:
                     shutil.rmtree(os.path.join(outDirName, fname))
 
+        # Use pyxamstore to unpack if the assemblies are inside an assemblies.blob file
+        if os.path.isfile(assembliesFolderPath + "/assemblies.blob"):
+            current_directory = os.getcwd()
+            os.chdir(assembliesFolderPath)
+            os.system("pyxamstore unpack")
+            os.chdir(current_directory)
+            output_folder = assembliesFolderPath + "/out"
+            for root, dirs, files in os.walk(output_folder):
+                for file in files:
+                    src_path = os.path.join(output_folder, file)
+                    dst_path = os.path.join(assembliesFolderPath, file)
+                    shutil.move(src_path, dst_path)
+            shutil.rmtree(output_folder)
+
         # Decompress xalz compressed files
-        for root, dirs, files in os.walk(assembliesFoldePath):
+        for root, dirs, files in os.walk(assembliesFolderPath):
             for file in files:
                 if file.endswith('.dll'):
                     with open(root + "/" + file, "rb") as ofile:
@@ -39,7 +54,7 @@ def decompileAssemblies(apkPath, outDirName):
 
         # Decompile .dll assemblies
         # (needs to occur in a separate loop because otherwise ilspycmd has issues opening the files)
-        for root, dirs, files in os.walk(assembliesFoldePath):
+        for root, dirs, files in os.walk(assembliesFolderPath):
             for file in files:
                 if file.endswith('.dll'):
                     with open(root + "/" + file, "rb") as ofile:
@@ -54,8 +69,8 @@ def decompileAssemblies(apkPath, outDirName):
                             shutil.move(decompiledFilePath, outDirName)
                             print('Dexamarin: {} was successfully decompiled'.format(ofile.name))
 
-        if not os.listdir(assembliesFoldePath):
-            shutil.rmtree(assembliesFoldePath)
+        if not os.listdir(assembliesFolderPath):
+            shutil.rmtree(assembliesFolderPath)
 
         if errorFiles:
             print("Dexamarin: error decompiling the following files: ")
