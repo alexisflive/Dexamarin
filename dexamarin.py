@@ -1,16 +1,15 @@
+import argparse
 import os
 import shutil
 import struct
-import sys
-import time
 import lz4.block
+from termcolor import colored
 
-
+header_xalz_magic = b'XALZ'
 errorFiles = []
 
 
 def decompileAssemblies(apkPath, outDirName):
-        header_xalz_magic = b'XALZ'
         assembliesFolderPath = outDirName + "/assemblies"
 
         os.system('unzip {} -d {}'.format(apkPath, outDirName))
@@ -40,34 +39,22 @@ def decompileAssemblies(apkPath, outDirName):
                     dst_path = os.path.join(assembliesFolderPath, file)
                     shutil.move(src_path, dst_path)
             shutil.rmtree(output_folder)
+            os.remove(assembliesFolderPath + "/assemblies.blob")
+            os.remove(assembliesFolderPath + "/assemblies.json")
+            os.remove(assembliesFolderPath + "/assemblies.manifest")
 
         # Decompress xalz compressed files
         for root, dirs, files in os.walk(assembliesFolderPath):
             for file in files:
                 if file.endswith('.dll'):
-                    with open(root + "/" + file, "rb") as ofile:
-                        data = ofile.read()
-                        decompiledFilePath = ofile.name.replace(".dll", ".cs")
-
-                        if data[:4] == header_xalz_magic:
-                            decompressXalz(ofile.name, data)
+                    decompressXalz(root + "/" + file)
 
         # Decompile .dll assemblies
         # (needs to occur in a separate loop because otherwise ilspycmd has issues opening the files)
         for root, dirs, files in os.walk(assembliesFolderPath):
             for file in files:
                 if file.endswith('.dll'):
-                    with open(root + "/" + file, "rb") as ofile:
-                        decompiledFilePath = ofile.name.replace(".dll", ".cs")
-
-                        if os.system('ilspycmd {} > {} 2>/dev/null'.format(ofile.name, decompiledFilePath)):
-                            print('Dexamarin: there was an error decompiling {}'.format(ofile.name))
-                            errorFiles.append(ofile.name)
-                            os.remove(decompiledFilePath)
-                        else:
-                            os.remove(ofile.name)
-                            shutil.move(decompiledFilePath, outDirName)
-                            print('Dexamarin: {} was successfully decompiled'.format(ofile.name))
+                    decompileAssembly(root + "/" + file, outDirName)
 
         if not os.listdir(assembliesFolderPath):
             shutil.rmtree(assembliesFolderPath)
@@ -79,22 +66,56 @@ def decompileAssemblies(apkPath, outDirName):
 
         print("Dexamarin: finished decompiling the {}'s Xamarin assemblies".format(apkPath))
 
+def decompressXalz(filePath, outFilePath=None):
+    with open(filePath, "rb") as ofile:
+        data = ofile.read()
+        if outFilePath != None:
+            decompiledFilePath = outFilePath
+        else:
+            decompiledFilePath = ofile.name
 
-def decompressXalz(inFilePath, data):
-        header_uncompressed_length = struct.unpack('<I', data[8:12])[0]
-        payload = data[12:]
+        if data[:4] == header_xalz_magic:
+            header_uncompressed_length = struct.unpack('<I', data[8:12])[0]
+            payload = data[12:]
 
-        decompressed = lz4.block.decompress(payload, uncompressed_size = header_uncompressed_length)
+            decompressed = lz4.block.decompress(payload, uncompressed_size = header_uncompressed_length)
 
-        with open(inFilePath, "wb") as output_file:
-            output_file.write(decompressed)
-            output_file.close()
+            with open(decompiledFilePath, "wb") as output_file:
+                output_file.write(decompressed)
+                output_file.close()
 
-        print("Dexamarin: {} was xalz decompressed".format(inFilePath))
+            print("Dexamarin: {} was xalz decompressed".format(ofile))
+            return decompiledFilePath
+    
+    return filePath
 
+def decompileAssembly(assembly, outDirName=None):
+    with open(assembly, "rb") as ofile:
+        decompiledFilePath = ofile.name.replace(".dll", ".cs")
+
+        if os.system('ilspycmd {} > {} 2>/dev/null'.format(ofile.name, decompiledFilePath)):
+            print('Dexamarin: there was an error decompiling {}'.format(ofile.name))
+            errorFiles.append(ofile.name)
+            os.remove(decompiledFilePath)
+        else:
+            os.remove(ofile.name)
+            if (outDirName != None): 
+                shutil.move(decompiledFilePath, outDirName)
+            print('Dexamarin: {} was successfully decompiled'.format(ofile.name))
 
 if __name__ == "__main__":
-        apkPath = sys.argv[1:][0]
-        outDirName = apkPath.replace(".apk", ".assemblies")
-        os.mkdir(outDirName)
-        decompileAssemblies(apkPath, outDirName)
+    parser = argparse.ArgumentParser(description='Decompile Xamarin apps')
+    parser.add_argument('file', type=str, 
+                        help='the apk to decompile (or single assembly if the -s option is used)')
+    parser.add_argument('-s', '--single-assembly', action='store_true', 
+                        help='decompile a single assembly rather than an apk')
+    args = parser.parse_args()
+
+    srcFile = args.file
+    if (args.single_assembly == False):
+        outName = srcFile.replace(".apk", ".decompiled.assemblies")
+        os.mkdir(outName)
+        decompileAssemblies(srcFile, outName)
+    else:
+        decompressedName = decompressXalz(srcFile, srcFile.replace(".dll", ".decompressed.dll"))
+        decompileAssembly(decompressedName, decompressedName.replace(".decompressed.dll", ".decompiled.cs"))
