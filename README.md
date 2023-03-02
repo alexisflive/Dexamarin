@@ -1,6 +1,8 @@
 # Dexamarin
 
-Xamarin app decompilation tool (only Android APK support for now)
+Xamarin app decompilation tool (only Android APK support for now).
+
+Use this to automatically extract the C# code from the embedded DLLs on apps built with Xamarin.
 
 
 ## DEPENDENCIES (install these before running this tool)
